@@ -1,0 +1,25 @@
+# Build output
+**/bin/
+**/obj/
+.verify-build*/
+*.nupkg
+*.snupkg
+
+# Local configuration and secrets
+**/local.settings.json
+**/appsettings.Local.json
+
+# Visual Studio
+.vs/
+*.user
+*.suo
+*.cache
+
+# Tests and coverage
+TestResults/
+coverage/
+**/coverage.cobertura.xml
+**/coverage.opencover.xml
+
+# Logs
+*.log
