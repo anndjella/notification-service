@@ -1,0 +1,30 @@
+{
+  "IsEncrypted": false,
+  "Values": {
+    "AzureWebJobsStorage": "UseDevelopmentStorage=true",
+    "FUNCTIONS_WORKER_RUNTIME": "dotnet-isolated",
+
+    "SqlConnectionString": "Server=(localdb)\\MSSQLLocalDB;Database=StudentExamDB;Trusted_Connection=True;TrustServerCertificate=True",
+    "StudentExamSystemBaseUrl": "https://localhost:7008/",
+    "InternalApiKey": "use-the-same-value-as-the-api-ServiceAuthentication--ApiKey",
+    "AllowUntrustedDevelopmentCertificate": "true",
+    "InternalHttpTimeoutSeconds": "10",
+    "InternalHttpRetryCount": "2",
+    "InternalHttpRetryBaseDelayMilliseconds": "200",
+
+    "ServiceBusConnection__fullyQualifiedNamespace": "sb-notification-<suffix>-swc.servicebus.windows.net",
+    "NotificationQueueName": "notification-delivery",
+
+    "EmailProvider": "Log",
+    "AzureCommunicationEmailConnectionString": "",
+    "AzureCommunicationEmailSenderAddress": "DoNotReply@your-domain.azurecomm.net",
+
+    "ReminderTimeZone": "Europe/Belgrade",
+    "MissingExamResultReminderDays": "30",
+    "RegistrationReminderSchedule": "0 */5 * * * *",
+    "MissingExamResultReminderSchedule": "0 */5 * * * *",
+    "EmailRetrySchedule": "0 */2 * * * *",
+    "EmailMaxDeliveryAttempts": "3",
+    "EmailRetryBatchSize": "50"
+  }
+}
