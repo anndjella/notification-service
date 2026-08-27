@@ -1,6 +1,5 @@
 using NotificationService.Application.Abstractions;
 using NotificationService.Application.Notifications;
-using NotificationService.Application.RegistrationReminders;
 using NotificationService.Domain.Notifications;
 
 namespace NotificationService.Application.MissingExamResults;
@@ -8,43 +7,38 @@ namespace NotificationService.Application.MissingExamResults;
 public sealed class MissingExamResultReminderService
 {
     private readonly IMissingExamResultCandidateReader _candidateReader;
-    private readonly NotificationDispatcher _dispatcher;
+    private readonly INotificationMessagePublisher _publisher;
 
     public MissingExamResultReminderService(
         IMissingExamResultCandidateReader candidateReader,
-        NotificationDispatcher dispatcher)
+        INotificationMessagePublisher publisher)
     {
         _candidateReader = candidateReader;
-        _dispatcher = dispatcher;
+        _publisher = publisher;
     }
 
-    public async Task<RegistrationReminderRunResult> ExecuteAsync(
+    public async Task<NotificationScheduleRunResult> ExecuteAsync(
         DateOnly examDate,
         DateTime createdAtUtc,
         CancellationToken cancellationToken = default)
     {
         var candidates = await _candidateReader.ListAsync(examDate, cancellationToken);
-        var createdCount = 0;
-
-        foreach (var candidate in candidates)
-        {
-            var notification = Notification.Create(
+        var messages = candidates.Select(candidate => new NotificationMessage(
                 candidate.UserId,
                 candidate.Email,
+                candidate.RecipientName,
                 NotificationType.MissingExamResultReminder,
                 "Missing exam results",
                 $"It has been 30 days since the {candidate.SubjectName} exam in {candidate.TermName}. " +
                 $"A result or absence is still missing for {candidate.MissingResultCount} student(s).",
                 $"missing-exam-results:{candidate.TeacherId}:{candidate.SubjectId}:{candidate.TermId}:{candidate.ExamDate:yyyyMMdd}",
-                createdAtUtc);
+                createdAtUtc))
+            .ToArray();
 
-            if (await _dispatcher.DispatchAsync(notification, candidate.RecipientName, cancellationToken))
-                createdCount++;
-        }
+        await _publisher.PublishAsync(messages, cancellationToken);
 
-        return new RegistrationReminderRunResult(
+        return new NotificationScheduleRunResult(
             candidates.Count,
-            createdCount,
-            candidates.Count - createdCount);
+            messages.Length);
     }
 }

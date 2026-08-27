@@ -48,9 +48,8 @@ public sealed class ScheduleMissingExamResultReminders
             cancellationToken);
 
         _logger.LogInformation(
-            "Missing exam result scheduler completed. Candidates: {CandidateCount}, created: {CreatedCount}, duplicates: {DuplicateCount}.",
+            "Missing exam result scheduler completed. Candidates: {CandidateCount}, enqueued: {EnqueuedCount}.",
             result.CandidateCount,
-            result.CreatedCount,
-            result.DuplicateCount);
+            result.EnqueuedCount);
     }
 }

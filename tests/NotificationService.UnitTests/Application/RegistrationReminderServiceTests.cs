@@ -1,6 +1,6 @@
 using NotificationService.Application.Abstractions;
-using NotificationService.Application.RegistrationReminders;
 using NotificationService.Application.Notifications;
+using NotificationService.Application.RegistrationReminders;
 using NotificationService.Domain.Notifications;
 
 namespace NotificationService.UnitTests.Application;
@@ -8,7 +8,7 @@ namespace NotificationService.UnitTests.Application;
 public sealed class RegistrationReminderServiceTests
 {
     [Fact]
-    public async Task ExecuteAsync_CreatesOneNotificationPerCandidate()
+    public async Task ExecuteAsync_EnqueuesOneMessagePerCandidate()
     {
         var candidates = new[]
         {
@@ -21,49 +21,40 @@ public sealed class RegistrationReminderServiceTests
                 RegistrationEndDate: new DateOnly(2026, 7, 16),
                 SubjectNames: new[] { "Databases", "Mathematics" })
         };
-        var repository = new FakeNotificationRepository();
+        var publisher = new RecordingPublisher();
         var service = new RegistrationReminderService(
             new StubCandidateReader(candidates),
-            new NotificationDispatcher(repository, new FakeEmailSender()));
+            publisher);
 
         var result = await service.ExecuteAsync(
             new DateOnly(2026, 7, 16),
             new DateTime(2026, 7, 15, 8, 0, 0, DateTimeKind.Utc));
 
         Assert.Equal(1, result.CandidateCount);
-        Assert.Equal(1, result.CreatedCount);
-        var notification = Assert.Single(repository.Notifications);
-        Assert.Equal("registration-deadline:5:42", notification.DeduplicationKey);
-        Assert.Contains("Databases", notification.Message);
-        Assert.Contains("Mathematics", notification.Message);
+        Assert.Equal(1, result.EnqueuedCount);
+        var message = Assert.Single(publisher.Messages);
+        Assert.Equal(NotificationType.RegistrationDeadlineReminder, message.Type);
+        Assert.Equal("registration-deadline:5:42", message.DeduplicationKey);
+        Assert.Equal("Test Student", message.RecipientName);
+        Assert.Contains("Databases", message.Message);
+        Assert.Contains("Mathematics", message.Message);
     }
 
     [Fact]
-    public async Task ExecuteAsync_WhenNotificationAlreadyExists_ReportsDuplicate()
+    public async Task ExecuteAsync_WhenNoCandidates_EnqueuesNothing()
     {
-        var candidates = new[]
-        {
-            new RegistrationReminderCandidate(
-                UserId: 42,
-                Email: "student@example.com",
-                RecipientName: "Test Student",
-                TermId: 5,
-                TermName: "July term",
-                RegistrationEndDate: new DateOnly(2026, 7, 16),
-                SubjectNames: new[] { "Databases" })
-        };
+        var publisher = new RecordingPublisher();
         var service = new RegistrationReminderService(
-            new StubCandidateReader(candidates),
-            new NotificationDispatcher(
-                new FakeNotificationRepository(alwaysDuplicate: true),
-                new FakeEmailSender()));
+            new StubCandidateReader([]),
+            publisher);
 
         var result = await service.ExecuteAsync(
             new DateOnly(2026, 7, 16),
             new DateTime(2026, 7, 15, 8, 0, 0, DateTimeKind.Utc));
 
-        Assert.Equal(0, result.CreatedCount);
-        Assert.Equal(1, result.DuplicateCount);
+        Assert.Equal(0, result.CandidateCount);
+        Assert.Equal(0, result.EnqueuedCount);
+        Assert.Empty(publisher.Messages);
     }
 
     private sealed class StubCandidateReader : IRegistrationReminderCandidateReader
@@ -81,67 +72,16 @@ public sealed class RegistrationReminderServiceTests
             => Task.FromResult(_candidates);
     }
 
-    private sealed class FakeNotificationRepository : INotificationRepository
+    private sealed class RecordingPublisher : INotificationMessagePublisher
     {
-        private readonly bool _alwaysDuplicate;
+        public List<NotificationMessage> Messages { get; } = [];
 
-        public FakeNotificationRepository(bool alwaysDuplicate = false)
-        {
-            _alwaysDuplicate = alwaysDuplicate;
-        }
-
-        public List<Notification> Notifications { get; } = new();
-
-        public Task<bool> TryAddAsync(
-            Notification notification,
+        public Task PublishAsync(
+            IReadOnlyCollection<NotificationMessage> messages,
             CancellationToken cancellationToken = default)
         {
-            if (_alwaysDuplicate)
-                return Task.FromResult(false);
-
-            Notifications.Add(notification);
-            return Task.FromResult(true);
+            Messages.AddRange(messages);
+            return Task.CompletedTask;
         }
-
-        public Task<IReadOnlyList<Notification>> ListForUserAsync(
-            int userId,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<Notification>>(
-                Notifications.Where(notification => notification.UserId == userId).ToList());
-
-        public Task<int> CountUnreadAsync(
-            int userId,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(Notifications.Count(notification =>
-                notification.UserId == userId && notification.ReadAtUtc is null));
-
-        public Task<Notification?> GetOwnedAsync(
-            Guid notificationId,
-            int userId,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult(Notifications.FirstOrDefault(notification =>
-                notification.Id == notificationId && notification.UserId == userId));
-
-        public Task<IReadOnlyList<Notification>> ListEmailRetryCandidatesAsync(
-            int maxAttempts,
-            int take,
-            CancellationToken cancellationToken = default)
-            => Task.FromResult<IReadOnlyList<Notification>>([]);
-
-        public Task SaveChangesAsync(CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
-    }
-
-    private sealed class FakeEmailSender : IEmailSender
-    {
-        public bool IsEnabled => true;
-
-        public Task SendAsync(
-            string recipientEmail,
-            string recipientName,
-            string subject,
-            string message,
-            CancellationToken cancellationToken = default)
-            => Task.CompletedTask;
     }
 }

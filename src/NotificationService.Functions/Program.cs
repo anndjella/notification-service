@@ -1,3 +1,4 @@
+using Azure.Messaging.ServiceBus;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.Extensions.Hosting;
@@ -8,6 +9,7 @@ using NotificationService.Application.Notifications;
 using NotificationService.Functions.Clients;
 using NotificationService.Functions.Email;
 using NotificationService.Functions.Http;
+using NotificationService.Functions.Messaging;
 using NotificationService.Infrastructure;
 using NotificationService.Infrastructure.Persistence;
 
@@ -27,6 +29,8 @@ var host = new HostBuilder()
             ?? throw new InvalidOperationException("Missing StudentExamSystemBaseUrl configuration.");
         var internalApiKey = context.Configuration["InternalApiKey"]
             ?? throw new InvalidOperationException("Missing InternalApiKey configuration.");
+        var notificationQueueName = context.Configuration["NotificationQueueName"]
+            ?? throw new InvalidOperationException("Missing NotificationQueueName configuration.");
 
         services.AddTransient<InternalServiceResilienceHandler>();
         services.AddHttpClient<StudentExamSystemClient>(client =>
@@ -63,10 +67,15 @@ var host = new HostBuilder()
                 : services.GetRequiredService<ConfiguredEmailSender>();
         });
         services.AddScoped<NotificationDispatcher>();
+        services.AddScoped<NotificationMessageProcessor>();
         services.AddScoped<NotificationQueryService>();
         services.AddScoped<EmailRetryService>();
         services.AddScoped<RegistrationReminderService>();
         services.AddScoped<MissingExamResultReminderService>();
+        services.AddSingleton(_ => ServiceBusClientFactory.Create(context.Configuration));
+        services.AddSingleton(services =>
+            services.GetRequiredService<ServiceBusClient>().CreateSender(notificationQueueName));
+        services.AddSingleton<INotificationMessagePublisher, ServiceBusNotificationMessagePublisher>();
         services.AddSingleton<InternalApiKeyAuthorizer>();
         services.AddSingleton(TimeProvider.System);
     })
