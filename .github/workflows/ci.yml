@@ -13,7 +13,7 @@ permissions:
   contents: read
 
 env:
-  AZURE_FUNCTIONAPP_NAME: student-exam-notifications-2610
+  AZURE_FUNCTIONAPP_NAME: func-notification-swc
 
 concurrency:
   group: ci-${{ github.workflow }}-${{ github.ref }}

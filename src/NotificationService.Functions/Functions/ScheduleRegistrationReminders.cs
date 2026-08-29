@@ -47,9 +47,8 @@ public sealed class ScheduleRegistrationReminders
             cancellationToken);
 
         _logger.LogInformation(
-            "Registration reminder scheduler completed. Candidates: {CandidateCount}, created: {CreatedCount}, duplicates: {DuplicateCount}.",
+            "Registration reminder scheduler completed. Candidates: {CandidateCount}, enqueued: {EnqueuedCount}.",
             result.CandidateCount,
-            result.CreatedCount,
-            result.DuplicateCount);
+            result.EnqueuedCount);
     }
 }

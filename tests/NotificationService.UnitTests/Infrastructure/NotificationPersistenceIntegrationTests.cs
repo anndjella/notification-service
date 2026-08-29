@@ -62,12 +62,16 @@ public sealed class NotificationPersistenceIntegrationTests : IAsyncLifetime
             SubjectNames: ["Distributed Systems"]));
         var emailSender = new RecordingEmailSender();
         var dispatcher = new NotificationDispatcher(_repository, emailSender);
-        var reminderService = new RegistrationReminderService(candidateReader, dispatcher);
+        var publisher = new RecordingPublisher();
+        var reminderService = new RegistrationReminderService(candidateReader, publisher);
+        var processor = new NotificationMessageProcessor(dispatcher);
         var queryService = new NotificationQueryService(_repository);
         var createdAtUtc = new DateTime(2026, 7, 22, 8, 0, 0, DateTimeKind.Utc);
 
         var firstRun = await reminderService.ExecuteAsync(registrationEndsOn, createdAtUtc);
         var repeatedRun = await reminderService.ExecuteAsync(registrationEndsOn, createdAtUtc);
+        var firstProcessed = await processor.ExecuteAsync(publisher.Messages[0]);
+        var duplicateProcessed = await processor.ExecuteAsync(publisher.Messages[1]);
         var notifications = await queryService.ListAsync(42);
         var unreadBefore = await queryService.CountUnreadAsync(42);
         var marked = await queryService.MarkAsReadAsync(
@@ -76,10 +80,10 @@ public sealed class NotificationPersistenceIntegrationTests : IAsyncLifetime
             createdAtUtc.AddMinutes(1));
         var unreadAfter = await queryService.CountUnreadAsync(42);
 
-        Assert.Equal(1, firstRun.CreatedCount);
-        Assert.Equal(0, firstRun.DuplicateCount);
-        Assert.Equal(0, repeatedRun.CreatedCount);
-        Assert.Equal(1, repeatedRun.DuplicateCount);
+        Assert.Equal(1, firstRun.EnqueuedCount);
+        Assert.Equal(1, repeatedRun.EnqueuedCount);
+        Assert.True(firstProcessed);
+        Assert.False(duplicateProcessed);
         Assert.Single(notifications);
         Assert.Equal(1, unreadBefore);
         Assert.True(marked);
@@ -133,6 +137,19 @@ public sealed class NotificationPersistenceIntegrationTests : IAsyncLifetime
             CancellationToken cancellationToken = default)
         {
             SendCount++;
+            return Task.CompletedTask;
+        }
+    }
+
+    private sealed class RecordingPublisher : INotificationMessagePublisher
+    {
+        public List<NotificationMessage> Messages { get; } = [];
+
+        public Task PublishAsync(
+            IReadOnlyCollection<NotificationMessage> messages,
+            CancellationToken cancellationToken = default)
+        {
+            Messages.AddRange(messages);
             return Task.CompletedTask;
         }
     }

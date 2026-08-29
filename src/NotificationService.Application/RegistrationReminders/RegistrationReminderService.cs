@@ -7,44 +7,41 @@ namespace NotificationService.Application.RegistrationReminders;
 public sealed class RegistrationReminderService
 {
     private readonly IRegistrationReminderCandidateReader _candidateReader;
-    private readonly NotificationDispatcher _dispatcher;
+    private readonly INotificationMessagePublisher _publisher;
 
     public RegistrationReminderService(
         IRegistrationReminderCandidateReader candidateReader,
-        NotificationDispatcher dispatcher)
+        INotificationMessagePublisher publisher)
     {
         _candidateReader = candidateReader;
-        _dispatcher = dispatcher;
+        _publisher = publisher;
     }
 
-    public async Task<RegistrationReminderRunResult> ExecuteAsync(
+    public async Task<NotificationScheduleRunResult> ExecuteAsync(
         DateOnly registrationEndsOn,
         DateTime createdAtUtc,
         CancellationToken cancellationToken = default)
     {
         var candidates = await _candidateReader.ListAsync(registrationEndsOn, cancellationToken);
-        var createdCount = 0;
-
-        foreach (var candidate in candidates)
+        var messages = candidates.Select(candidate =>
         {
             var subjects = string.Join(", ", candidate.SubjectNames.Order(StringComparer.OrdinalIgnoreCase));
-            var notification = Notification.Create(
+            return new NotificationMessage(
                 candidate.UserId,
                 candidate.Email,
+                candidate.RecipientName,
                 NotificationType.RegistrationDeadlineReminder,
                 "Exam registration closes tomorrow",
                 $"Registration for {candidate.TermName} closes on {candidate.RegistrationEndDate:dd.MM.yyyy}. " +
                 $"You can still register: {subjects}.",
                 $"registration-deadline:{candidate.TermId}:{candidate.UserId}",
                 createdAtUtc);
+        }).ToArray();
 
-            if (await _dispatcher.DispatchAsync(notification, candidate.RecipientName, cancellationToken))
-                createdCount++;
-        }
+        await _publisher.PublishAsync(messages, cancellationToken);
 
-        return new RegistrationReminderRunResult(
+        return new NotificationScheduleRunResult(
             candidates.Count,
-            createdCount,
-            candidates.Count - createdCount);
+            messages.Length);
     }
 }
