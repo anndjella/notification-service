@@ -19,7 +19,7 @@ public sealed class MissingExamResultReminderServiceTests
             SubjectName: "Databases",
             TermId: 3,
             TermName: "July term",
-            ExamDate: new DateOnly(2026, 6, 17),
+            TermEndDate: new DateOnly(2026, 6, 17),
             MissingResultCount: 4);
         var publisher = new RecordingPublisher();
         var service = new MissingExamResultReminderService(
@@ -50,7 +50,7 @@ public sealed class MissingExamResultReminderServiceTests
         }
 
         public Task<IReadOnlyList<MissingExamResultCandidate>> ListAsync(
-            DateOnly examDate,
+            DateOnly cutoffDate,
             CancellationToken cancellationToken = default)
             => Task.FromResult(_candidates);
     }

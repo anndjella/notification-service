@@ -9,5 +9,5 @@ public sealed record MissingExamResultCandidate(
     string SubjectName,
     int TermId,
     string TermName,
-    DateOnly ExamDate,
+    DateOnly TermEndDate,
     int MissingResultCount);
