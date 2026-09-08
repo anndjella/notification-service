@@ -36,14 +36,14 @@ public sealed class ScheduleMissingExamResultReminders
     {
         var utcNow = _timeProvider.GetUtcNow();
         var localNow = TimeZoneInfo.ConvertTime(utcNow, _timeZone);
-        var examDate = DateOnly.FromDateTime(localNow.DateTime).AddDays(-_daysAfterExam);
+        var cutoffDate = DateOnly.FromDateTime(localNow.DateTime).AddDays(-_daysAfterExam);
 
         _logger.LogInformation(
-            "Missing exam result scheduler triggered. Looking for unresolved exams from {ExamDate}.",
-            examDate);
+            "Missing exam result scheduler triggered. Looking for exam periods that ended on or before {CutoffDate}.",
+            cutoffDate);
 
         var result = await _reminderService.ExecuteAsync(
-            examDate,
+            cutoffDate,
             utcNow.UtcDateTime,
             cancellationToken);
 

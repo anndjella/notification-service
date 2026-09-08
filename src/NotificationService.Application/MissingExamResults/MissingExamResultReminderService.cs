@@ -18,11 +18,11 @@ public sealed class MissingExamResultReminderService
     }
 
     public async Task<NotificationScheduleRunResult> ExecuteAsync(
-        DateOnly examDate,
+        DateOnly cutoffDate,
         DateTime createdAtUtc,
         CancellationToken cancellationToken = default)
     {
-        var candidates = await _candidateReader.ListAsync(examDate, cancellationToken);
+        var candidates = await _candidateReader.ListAsync(cutoffDate, cancellationToken);
         var messages = candidates.Select(candidate => new NotificationMessage(
                 candidate.UserId,
                 candidate.Email,
@@ -31,7 +31,7 @@ public sealed class MissingExamResultReminderService
                 "Missing exam results",
                 $"It has been 30 days since the {candidate.SubjectName} exam in {candidate.TermName}. " +
                 $"A result or absence is still missing for {candidate.MissingResultCount} student(s).",
-                $"missing-exam-results:{candidate.TeacherId}:{candidate.SubjectId}:{candidate.TermId}:{candidate.ExamDate:yyyyMMdd}",
+                $"missing-exam-results:{candidate.TeacherId}:{candidate.SubjectId}:{candidate.TermId}:{candidate.TermEndDate:yyyyMMdd}",
                 createdAtUtc))
             .ToArray();
 

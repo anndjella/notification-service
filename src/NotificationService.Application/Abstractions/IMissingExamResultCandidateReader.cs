@@ -5,6 +5,6 @@ namespace NotificationService.Application.Abstractions;
 public interface IMissingExamResultCandidateReader
 {
     Task<IReadOnlyList<MissingExamResultCandidate>> ListAsync(
-        DateOnly examDate,
+        DateOnly cutoffDate,
         CancellationToken cancellationToken = default);
 }

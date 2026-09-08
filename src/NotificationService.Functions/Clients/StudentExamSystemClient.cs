@@ -26,11 +26,11 @@ public sealed class StudentExamSystemClient :
     }
 
     async Task<IReadOnlyList<MissingExamResultCandidate>> IMissingExamResultCandidateReader.ListAsync(
-        DateOnly examDate,
+        DateOnly cutoffDate,
         CancellationToken cancellationToken)
     {
         return await _httpClient.GetFromJsonAsync<List<MissingExamResultCandidate>>(
-            $"api/internal/notification-candidates/missing-exam-results?examDate={examDate:yyyy-MM-dd}",
+            $"api/internal/notification-candidates/missing-exam-results?cutoffDate={cutoffDate:yyyy-MM-dd}",
             cancellationToken) ?? [];
     }
 }
