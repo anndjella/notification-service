@@ -1,0 +1,84 @@
+name: SonarCloud
+
+on:
+  schedule:
+    - cron: "5 4 * * 1"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: sonarcloud-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  sonarcloud:
+    name: Analyze
+    runs-on: windows-latest
+    env:
+      SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+      SONAR_PROJECT_KEY: anndjella_notification-service
+      SONAR_ORG: anndjella
+      MSYS_NO_PATHCONV: "1"
+
+    steps:
+      - name: Check for SONAR_TOKEN
+        id: guard
+        shell: bash
+        run: |
+          if [ -n "${SONAR_TOKEN}" ]; then
+            echo "run=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "run=false" >> "$GITHUB_OUTPUT"
+            echo "::warning::SONAR_TOKEN is not set - skipping SonarCloud analysis."
+          fi
+
+      - name: Checkout
+        if: steps.guard.outputs.run == 'true'
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Setup .NET
+        if: steps.guard.outputs.run == 'true'
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 8.0.x
+
+      - name: Setup Java
+        if: steps.guard.outputs.run == 'true'
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install scanner
+        if: steps.guard.outputs.run == 'true'
+        run: dotnet tool install --global dotnet-sonarscanner
+
+      - name: Begin analysis
+        if: steps.guard.outputs.run == 'true'
+        shell: bash
+        run: |
+          dotnet sonarscanner begin \
+            /k:"${SONAR_PROJECT_KEY}" \
+            /o:"${SONAR_ORG}" \
+            /d:sonar.host.url="https://sonarcloud.io" \
+            /d:sonar.token="${SONAR_TOKEN}" \
+            /d:sonar.cs.opencover.reportsPaths="**/coverage.opencover.xml"
+
+      - name: Build and test with coverage
+        if: steps.guard.outputs.run == 'true'
+        shell: bash
+        run: |
+          dotnet build NotificationService.sln --configuration Release
+          dotnet test tests/NotificationService.UnitTests/NotificationService.Tests.csproj \
+            --configuration Release --no-build \
+            --settings coverlet.runsettings \
+            --results-directory ./TestResults
+
+      - name: End analysis
+        if: steps.guard.outputs.run == 'true'
+        shell: bash
+        run: dotnet sonarscanner end /d:sonar.token="${SONAR_TOKEN}"
