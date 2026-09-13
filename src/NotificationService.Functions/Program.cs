@@ -1,3 +1,4 @@
+using System.Net.Security;
 using Azure.Messaging.ServiceBus;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -42,12 +43,15 @@ var host = new HostBuilder()
             .ConfigurePrimaryHttpMessageHandler(() =>
             {
                 var handler = new HttpClientHandler();
-                if (bool.TryParse(
+                if (context.HostingEnvironment.IsDevelopment() &&
+                    bool.TryParse(
                         context.Configuration["AllowUntrustedDevelopmentCertificate"],
                         out var allowUntrusted) && allowUntrusted)
                 {
-                    handler.ServerCertificateCustomValidationCallback =
-                        HttpClientHandler.DangerousAcceptAnyServerCertificateValidator;
+                    handler.ServerCertificateCustomValidationCallback = (request, _, _, sslPolicyErrors) =>
+                        sslPolicyErrors == SslPolicyErrors.None ||
+                        (request?.RequestUri is { IsLoopback: true } &&
+                            sslPolicyErrors == SslPolicyErrors.RemoteCertificateChainErrors);
                 }
 
                 return handler;
@@ -84,7 +88,7 @@ var host = new HostBuilder()
 using (var scope = host.Services.CreateScope())
 {
     var db = scope.ServiceProvider.GetRequiredService<NotificationDbContext>();
-    db.Database.Migrate();
+    await db.Database.MigrateAsync();
 }
 
-host.Run();
+await host.RunAsync();
