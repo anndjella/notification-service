@@ -29,8 +29,8 @@ public sealed class MissingExamResultReminderService
                 candidate.RecipientName,
                 NotificationType.MissingExamResultReminder,
                 "Missing exam results",
-                $"It has been 30 days since the {candidate.SubjectName} exam in {candidate.TermName}. " +
-                $"A result or absence is still missing for {candidate.MissingResultCount} student(s).",
+                $"The {candidate.TermName} term for {candidate.SubjectName} ended over 30 days ago and " +
+                $"you still need to sign the exam result for {candidate.MissingResultCount} student(s).",
                 $"missing-exam-results:{candidate.TeacherId}:{candidate.SubjectId}:{candidate.TermId}:{candidate.TermEndDate:yyyyMMdd}",
                 createdAtUtc))
             .ToArray();
