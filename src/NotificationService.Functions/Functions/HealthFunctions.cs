@@ -36,13 +36,13 @@ public sealed class HealthFunctions
             var canConnect = await _db.Database.CanConnectAsync(cancellationToken);
             var response = request.CreateResponse(
                 canConnect ? HttpStatusCode.OK : HttpStatusCode.ServiceUnavailable);
-            await response.WriteStringAsync(canConnect ? "Healthy" : "Unhealthy");
+            await response.WriteStringAsync(canConnect ? "Healthy" : "Unhealthy", cancellationToken);
             return response;
         }
         catch (Exception)
         {
             var response = request.CreateResponse(HttpStatusCode.ServiceUnavailable);
-            await response.WriteStringAsync("Unhealthy");
+            await response.WriteStringAsync("Unhealthy", cancellationToken);
             return response;
         }
     }
