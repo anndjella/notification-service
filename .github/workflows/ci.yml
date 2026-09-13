@@ -37,11 +37,45 @@ jobs:
       - name: Restore dependencies
         run: dotnet restore NotificationService.sln --configfile NuGet.Config
 
+      - name: Restore .NET tools
+        run: dotnet tool restore
+
       - name: Build
         run: dotnet build NotificationService.sln --configuration Release --no-restore
 
       - name: Run tests
-        run: dotnet test tests/NotificationService.UnitTests/NotificationService.Tests.csproj --configuration Release --no-build --verbosity normal
+        shell: bash
+        run: >
+          dotnet test tests/NotificationService.UnitTests/NotificationService.Tests.csproj
+          --configuration Release
+          --no-build
+          --verbosity normal
+          --logger "trx;LogFileName=test-results.trx"
+          --logger "console;verbosity=normal"
+          --results-directory ./TestResults
+          --settings coverlet.runsettings
+
+      - name: Coverage report
+        if: always()
+        shell: bash
+        run: |
+          dotnet tool run reportgenerator \
+            -reports:"./TestResults/**/coverage.cobertura.xml" \
+            -targetdir:"./TestResults/coveragereport" \
+            -reporttypes:"Html;MarkdownSummaryGithub;TextSummary;Badges"
+          {
+            echo "## Test coverage"
+            echo
+            cat ./TestResults/coveragereport/SummaryGithub.md
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload test results and coverage
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-results-and-coverage
+          path: ./TestResults
+          retention-days: 30
 
       - name: Publish Function App
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
@@ -55,18 +89,28 @@ jobs:
           path: ./publish
           include-hidden-files: true
           if-no-files-found: error
-          retention-days: 7
+          retention-days: 30
 
   deploy:
     name: Deploy Function App to Azure
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
     needs: build-and-test
     runs-on: ubuntu-latest
+    concurrency:
+      group: deploy-notification-service
+      cancel-in-progress: false
     permissions:
       contents: read
       id-token: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+      NOTIFICATION_BASE_URL: https://func-notification-swc.azurewebsites.net
 
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
       - name: Download Function App artifact
         uses: actions/download-artifact@v4
         with:
@@ -85,3 +129,45 @@ jobs:
         with:
           app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
           package: ./publish
+
+      - name: Smoke test
+        id: smoke
+        run: bash .github/scripts/smoke-test.sh "$NOTIFICATION_BASE_URL"
+
+      - name: Find previous good release
+        id: prev
+        if: failure()
+        run: |
+          set -eo pipefail
+          PREV_RUN_ID=$(gh run list \
+            --workflow ci.yml --branch master --event push --status success \
+            --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          if [ -z "$PREV_RUN_ID" ]; then
+            echo "::error::No previous successful run to roll back to."
+            exit 1
+          fi
+          echo "run_id=$PREV_RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download previous release
+        if: failure() && steps.prev.outputs.run_id != ''
+        uses: actions/download-artifact@v4
+        with:
+          name: notification-service
+          path: ./rollback
+          run-id: ${{ steps.prev.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Roll back
+        if: failure() && steps.prev.outputs.run_id != ''
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          package: ./rollback
+
+      - name: Verify rollback and fail the run
+        if: failure() && steps.prev.outputs.run_id != ''
+        run: |
+          echo "::warning::Bad deploy was rolled back to run ${{ steps.prev.outputs.run_id }}."
+          bash .github/scripts/smoke-test.sh "$NOTIFICATION_BASE_URL"
+          echo "::notice::Previous release is healthy and live. Run left red so the failed deploy gets investigated."
+          exit 1
