@@ -1,0 +1,12 @@
+[extend]
+useDefault = true
+
+[allowlist]
+description = "Build output, tool caches and local build verification folders"
+paths = [
+  '''(^|/)bin/''',
+  '''(^|/)obj/''',
+  '''(^|/)\.vs/''',
+  '''(^|/)TestResults/''',
+  '''(^|/)\.verify-build''',
+]

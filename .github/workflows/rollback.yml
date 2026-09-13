@@ -1,0 +1,103 @@
+name: Rollback Notification Service
+
+# manual button for when a bad deploy only gets noticed after CI already went
+# green (so the auto-rollback in ci.yml never had a reason to trigger). pick
+# which run's artifact you want live again.
+
+on:
+  workflow_dispatch:
+    inputs:
+      run_id:
+        description: "CI run id to redeploy the Function App artifact from. Empty = last successful run on master."
+        type: string
+        required: false
+      reason:
+        description: "Why are you rolling back? (recorded in the run log)"
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: deploy-notification-service
+  cancel-in-progress: false
+
+env:
+  AZURE_FUNCTIONAPP_NAME: func-notification-swc
+  NOTIFICATION_BASE_URL: https://func-notification-swc.azurewebsites.net
+
+jobs:
+  rollback:
+    name: Redeploy previous release
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+      actions: read
+    env:
+      GH_TOKEN: ${{ github.token }}
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Resolve target run
+        id: target
+        env:
+          INPUT_RUN_ID: ${{ inputs.run_id }}
+          INPUT_REASON: ${{ inputs.reason }}
+        run: |
+          set -eo pipefail
+          echo "Reason: $INPUT_REASON"
+          RUN_ID="$INPUT_RUN_ID"
+          if [ -z "$RUN_ID" ]; then
+            RUN_ID=$(gh run list \
+              --workflow ci.yml --branch master --event push --status success \
+              --limit 1 --json databaseId --jq '.[0].databaseId // empty')
+          fi
+          if [ -z "$RUN_ID" ]; then
+            echo "::error::Could not resolve a run id to roll back to."
+            exit 1
+          fi
+          echo "Rolling back to CI run $RUN_ID"
+          echo "run_id=$RUN_ID" >> "$GITHUB_OUTPUT"
+
+      - name: Download release artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: notification-service
+          path: ./publish
+          run-id: ${{ steps.target.outputs.run_id }}
+          github-token: ${{ github.token }}
+
+      - name: Sign in to Azure
+        uses: azure/login@v2
+        with:
+          client-id: ${{ secrets.AZURE_CLIENT_ID }}
+          tenant-id: ${{ secrets.AZURE_TENANT_ID }}
+          subscription-id: ${{ secrets.AZURE_SUBSCRIPTION_ID }}
+
+      - name: Deploy
+        uses: Azure/functions-action@v1
+        with:
+          app-name: ${{ env.AZURE_FUNCTIONAPP_NAME }}
+          package: ./publish
+
+      - name: Smoke test
+        run: bash .github/scripts/smoke-test.sh "$NOTIFICATION_BASE_URL"
+
+      - name: Summary
+        if: always()
+        env:
+          INPUT_REASON: ${{ inputs.reason }}
+          TARGET_RUN: ${{ steps.target.outputs.run_id }}
+          JOB_STATUS: ${{ job.status }}
+        run: |
+          {
+            echo "## Rollback"
+            echo
+            echo "- Target CI run: $TARGET_RUN"
+            echo "- Reason: $INPUT_REASON"
+            echo "- Result: $JOB_STATUS"
+          } >> "$GITHUB_STEP_SUMMARY"
